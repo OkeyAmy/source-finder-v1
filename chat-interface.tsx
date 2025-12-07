@@ -8,7 +8,7 @@ import { Plus, ArrowUp, Menu, RotateCcw, Zap, RefreshCcw, Copy, Share2, ThumbsUp
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import type { Network, Mode, ChatMessage, ResearchResponse, AuditResponse, ActionPreview } from "@/lib/types"
+import type { Network, Mode, ChatMessage, ResearchResponse, AuditResponse, ActionPreview, MessageCategory } from "@/lib/types"
 import { SlidePanel } from "@/components/chat/slide-panel"
 import { NewSessionModal } from "@/components/chat/new-session-modal"
 import { QuickActionMenu } from "@/components/chat/quick-action-menu"
@@ -43,6 +43,14 @@ const PLACEHOLDERS = [
   "Simulate a BNB swap",
 ]
 
+const apiRoutes: Record<MessageCategory, string> = {
+  chat: "/api/chaingpt/chat",
+  audit: "/api/chaingpt/audit",
+  generate: "/api/chaingpt/generate",
+  action: "",
+  system: "",
+}
+
 export default function ChatInterface() {
   // State
   const [inputValue, setInputValue] = useState("")
@@ -53,6 +61,7 @@ export default function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [thinkingStep, setThinkingStep] = useState<string | null>(null)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [detectedMode, setDetectedMode] = useState<string | null>(null)
 
   // UI State
   const [isSlidePanelOpen, setIsSlidePanelOpen] = useState(false)
@@ -106,88 +115,217 @@ export default function ChatInterface() {
   }, [messages, thinkingStep])
 
   // Simulate streaming thinking steps
-  const simulateThinking = async (steps: string[]) => {
-    for (const step of steps) {
-      setThinkingStep(step)
-      await new Promise((resolve) => setTimeout(resolve, 800))
-    }
-    setThinkingStep(null)
-  }
+  // const simulateThinking = async (steps: string[]) => {
+  //   for (const step of steps) {
+  //     setThinkingStep(step)
+  //     await new Promise((resolve) => setTimeout(resolve, 800))
+  //   }
+  //   setThinkingStep(null)
+  // }
 
   // Determine response type based on input
-  const determineResponseType = (input: string): "research" | "audit" | "action" => {
-    const lowerInput = input.toLowerCase()
-    if (lowerInput.includes("audit") || lowerInput.includes("security") || lowerInput.includes("vulnerability")) {
-      return "audit"
+  // const determineResponseType = (input: string): "research" | "audit" | "action" => {
+  //   const lowerInput = input.toLowerCase()
+  //   if (lowerInput.includes("audit") || lowerInput.includes("security") || lowerInput.includes("vulnerability")) {
+  //     return "audit"
+  //   }
+  //   if (
+  //     lowerInput.includes("transfer") ||
+  //     lowerInput.includes("swap") ||
+  //     lowerInput.includes("deploy") ||
+  //     lowerInput.includes("send")
+  //   ) {
+  //     return "action"
+  //   }
+  //   return "research"
+  // }
+
+  // Determine response type based on input with pattern matching
+  const determineResponseType = (input: string): MessageCategory => {
+    const lowerInput = input.toLowerCase().trim()
+    
+    // === AUDIT PATTERNS ===
+    const auditPatterns = [
+      /audit/i,
+      /security/i,
+      /vulnerabilit(y|ies)/i,
+      /check.*contract/i,
+      /review.*code/i,
+      /is.*safe/i,
+      /analyze.*contract/i,
+      /scan.*for.*bugs/i,
+      /reentrancy/i,
+      /overflow/i,
+      /access control/i,
+      /pragma.*solidity/i, // Likely pasted Solidity code
+      /contract.*\{/i, // Solidity contract syntax
+    ]
+    
+    // === GENERATE PATTERNS ===
+    const generatePatterns = [
+      /generate.*contract/i,
+      /create.*contract/i,
+      /write.*contract/i,
+      /build.*contract/i,
+      /make.*contract/i,
+      /deploy.*new/i,
+      /(erc20|erc721|erc1155)/i, // Token standards
+      /nft.*contract/i,
+      /token.*contract/i,
+      /smart contract.*for/i,
+    ]
+    
+    // === ACTION PATTERNS (Transactions) ===
+    const actionPatterns = [
+      /transfer/i,
+      /send/i,
+      /swap/i,
+      /exchange/i,
+      /deploy/i,
+      /stake/i,
+      /unstake/i,
+      /claim/i,
+      /approve/i,
+      /bridge/i,
+      /0x[a-fA-F0-9]{40}/, // Ethereum address
+      /\d+(\.\d+)?\s*(bnb|busd|usdt|eth|btc)/i, // Amount + token
+    ]
+    
+    // === RESEARCH PATTERNS ===
+    const researchPatterns = [
+      /what is/i,
+      /explain/i,
+      /tell me about/i,
+      /how does.*work/i,
+      /price of/i,
+      /market cap/i,
+      /holders/i,
+      /liquidity/i,
+      /volume/i,
+      /apy/i,
+      /apr/i,
+    ]
+    
+    if (lowerInput.includes('pragma solidity') || 
+        lowerInput.includes('contract ') && lowerInput.includes('{')) {
+      return 'audit'
     }
-    if (
-      lowerInput.includes("transfer") ||
-      lowerInput.includes("swap") ||
-      lowerInput.includes("deploy") ||
-      lowerInput.includes("send")
-    ) {
-      return "action"
+    
+    if (generatePatterns.some(pattern => pattern.test(lowerInput))) {
+      return 'generate'
     }
-    return "research"
+    
+    if (auditPatterns.some(pattern => pattern.test(lowerInput))) {
+      return 'audit'
+    }
+    
+    if (actionPatterns.some(pattern => pattern.test(lowerInput))) {
+      return 'action'
+    }
+    
+    return 'chat'
   }
 
-  // Generate simulated response
+  // Generate response by streaming from the API into a placeholder agent message
   const generateResponse = async (userMessage: string) => {
-    setIsStreaming(true)
-    const responseType = activeMode === "research" ? determineResponseType(userMessage) : activeMode
+    setIsStreaming(true);
 
-    let thinkingSteps: string[]
-    let responseData: {
-      category: "research" | "audit" | "action"
-      data: ResearchResponse | AuditResponse | ActionPreview
-    }
+    // For this simple case we treat responses as research text replies.
+    // If you later want to handle audit/action structured responses, extend this.
+    const category: MessageCategory = determineResponseType(userMessage);
 
-    switch (responseType) {
-      case "audit":
-        thinkingSteps = auditThinkingSteps
-        responseData = {
-          category: "audit",
-          data: userMessage.toLowerCase().includes("safe") ? safeContractAuditSimulation : riskyContractAuditSimulation,
-        }
-        break
-      case "action":
-        thinkingSteps = actionThinkingSteps
-        if (userMessage.toLowerCase().includes("deny") || userMessage.toLowerCase().includes("hacker")) {
-          responseData = { category: "action", data: deniedActionSimulation }
-        } else if (userMessage.toLowerCase().includes("swap")) {
-          responseData = { category: "action", data: swapActionSimulation }
-        } else {
-          responseData = { category: "action", data: transferActionSimulation }
-        }
-        break
-      default:
-        thinkingSteps = researchThinkingSteps
-        responseData = { category: "research", data: tokenResearchSimulation }
-    }
+    const modeNames = { 
+      chat: 'Research', 
+      audit: 'Audit', 
+      generate: 'Generate', 
+      action: 'Action', 
+      system: 'System' 
+    } 
 
-    // Vibrate on send
-    navigator.vibrate?.(50)
+    setDetectedMode(modeNames[category]); 
+    // Clear after 2 seconds 
+    
+    setTimeout(() => setDetectedMode(null), 2000);
 
-    // Show thinking steps
-    await simulateThinking(thinkingSteps)
+    setActiveMode(
+      category === "chat" 
+        ? "research"
+        : category === "audit" || category === "generate"
+          ? "audit"
+          : "action"
+    );
 
-    // Add agent response
+    // Create a placeholder agent message that we'll update as chunks arrive
+    const agentId = `agent-${Date.now()}`
     const agentMessage: ChatMessage = {
-      id: `agent-${Date.now()}`,
+      id: agentId,
       type: "agent",
-      category: responseData.category,
+      category,
       content: "",
       timestamp: new Date(),
-      ...(responseData.category === "research" && { researchData: responseData.data as ResearchResponse }),
-      ...(responseData.category === "audit" && { auditData: responseData.data as AuditResponse }),
-      ...(responseData.category === "action" && { actionData: responseData.data as ActionPreview }),
     }
 
     setMessages((prev) => [...prev, agentMessage])
 
-    // Vibrate on response
-    navigator.vibrate?.(50)
-    setIsStreaming(false)
+    // setThinkingStep(thinkingStep)
+
+    try {
+      await handleChat(userMessage, (chunk: string) => {
+          // Append each chunk to the agent message content
+          setMessages((prev) => 
+            prev.map((m) => 
+              m.id === agentId
+                ? {...m, content: (m.content || "") + chunk}
+                : m
+            )
+          )
+        },
+        category
+      )
+
+      // Vibrate on complete
+      navigator.vibrate?.(50)
+    } catch (err: any) {
+      // Show error in the agent message
+      const msg = err?.message || String(err)
+      setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: `Error: ${msg}` } : m)))
+    } finally {
+      setIsStreaming(false)
+    }
+  }
+
+  const handleChat = async (userMessage: string, onChunk: (s: string) => void, messageType: MessageCategory) => {
+    const response = await fetch(apiRoutes[messageType], {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question: userMessage,
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(err || "Request Failed")
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error("Streaming not supported")
+    console.log("Reading...");
+
+    const decoder = new TextDecoder()
+    let done = false
+    while (!done) {
+      const { value, done: doneReading } = await reader.read()
+      done = doneReading
+
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true })
+        onChunk(chunk)
+      }
+    }
+    console.log("Done reading!");
   }
 
   // Handle form submission
@@ -370,6 +508,19 @@ export default function ChatInterface() {
                   {/* Category Label */}
                   <p className="text-xs text-gray-500 mb-2 font-medium">{getCategoryLabel(message.category)}</p>
 
+                  {/* Plain streaming text bubble */}
+                  {message.content !== undefined && message.content !== "" && (
+                    <div className="max-w-[80%] px-4 py-3 bg-white border border-gray-200 rounded-2xl rounded-bl-none mb-2">
+                      <p className="text-gray-900 whitespace-pre-wrap">
+                        {message.content}
+                        {/* ✅ Show cursor while streaming this message */}
+                        {isStreaming && message.id === messages[messages.length - 1]?.id && (
+                          <span className="inline-block w-1.5 h-4 bg-gray-900 ml-0.5 animate-pulse" />
+                        )}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Research Card */}
                   {message.researchData && (
                     <ResearchCard
@@ -440,6 +591,16 @@ export default function ChatInterface() {
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
           {/* Mode Chips */}
           <div className="flex items-center gap-2 mb-3">
+            {/* Detection Badge */} 
+            {detectedMode && ( 
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium animate-in fade-in slide-in-from-left">
+                <Zap className="h-3 w-3" /> 
+                <span>
+                  Detected: {detectedMode}
+                </span> 
+              </div> 
+            )}
+
             {(["research", "audit", "action"] as Mode[]).map((mode) => (
               <button
                 key={mode}
