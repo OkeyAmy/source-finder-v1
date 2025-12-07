@@ -295,7 +295,12 @@ export default function ChatInterface() {
   }
 
   const handleChat = async (userMessage: string, onChunk: (s: string) => void, messageType: MessageCategory) => {
-    const response = await fetch(apiRoutes[messageType], {
+    const apiRoute = apiRoutes[messageType];
+    if (!apiRoute) {
+      throw new Error(`Unsupported message type: ${messageType}`);
+    }
+    
+    const response = await fetch(apiRoute, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
