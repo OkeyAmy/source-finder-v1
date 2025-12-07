@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     );
   }
   
-  const stream = await chainGPTClient.chat(question, userId!);
+  const stream = await chainGPTClient.chat(question, userId || undefined);
   
   // Create a ReadableStream for SSE
   const encoder = new TextEncoder();
