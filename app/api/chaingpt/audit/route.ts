@@ -5,9 +5,16 @@ export async function POST(req: NextRequest) {
   try {
     const { question, userId } = await req.json();
     
-    if (!question) {
+    if (!question || typeof question !== 'string') {
       return NextResponse.json(
-        { error: 'Question is required' },
+        { error: 'Question is required and must be a string' },
+        { status: 400 }
+      );
+    }
+    
+    if (question.length > 10000) {
+      return NextResponse.json(
+        { error: 'Question exceeds maximum length of 10,000 characters' },
         { status: 400 }
       );
     }
