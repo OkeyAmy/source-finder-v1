@@ -1,9 +1,9 @@
 // Types for the Quack × ChainGPT Agent interface
 
-export type Network = "bnb-testnet" | "bnb-mainnet"
-export type MessageCategory = "chat" | "audit" | "action" | "system" | "generate"
+export type Network = "bscTestnet" | "bsc"
+export type MessageCategory = "research" | "audit" | "action" | "system" | "generate"
 export type RiskLevel = "low" | "medium" | "high" | "critical"
-export type Mode = "research" | "audit" | "action" | "generate"
+// export type Mode = "research" | "audit" | "action" | "generate"
 
 export interface Wallet {
   address: string

@@ -31,6 +31,9 @@ export interface Q402Config {
     amount: string
   }>
   autoSettle?: boolean
+  // When true the middleware will allow the payment `to` field to be any address
+  // (useful for agent-generated transfers where the recipient varies).
+  allowAnyRecipient?: boolean
 }
 
 export interface Q402PaymentInfo {
@@ -144,7 +147,11 @@ export function withQ402Payment(
       // Verify payment
       const verificationResult = await verifyPayment(payload)
 
-      if (payload.paymentDetails.token !== endpoint.token || String(payload.paymentDetails.amount) !== String(endpoint.amount) || payload.paymentDetails.to !== config.recipientAddress) {
+      const tokenMismatch = endpoint.token !== 'any' && payload.paymentDetails.token !== endpoint.token;
+      const amountMismatch = endpoint.amount !== 'any' && String(payload.paymentDetails.amount) !== String(endpoint.amount);
+      const toMismatch = !config.allowAnyRecipient && payload.paymentDetails.to !== config.recipientAddress;
+
+      if (tokenMismatch || amountMismatch || toMismatch) {
         return NextResponse.json({ error: 'Payment details do not match endpoint configuration' }, { status: 402 });
       }
 

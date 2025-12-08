@@ -13,8 +13,16 @@ if (!implementationContract) throw new Error("Q402_IMPLEMENTATION_CONTRACT requi
 const verifyingContract = process.env.Q402_VERIFYING_CONTRACT!;
 if (!verifyingContract) throw new Error("Q402_VERIFYING_CONTRACT required");
 
-const sponsorPrivateKey = process.env.SPONSOR_PRIVATE_KEY!;
-if (!sponsorPrivateKey) throw new Error("SPONSOR_PRIVATE_KEY required");
+const sponsorPrivateKeyRaw = process.env.SPONSOR_PRIVATE_KEY;
+if (!sponsorPrivateKeyRaw) throw new Error("SPONSOR_PRIVATE_KEY required");
+
+// Normalize: ensure 0x prefix
+const sponsorPrivateKey = sponsorPrivateKeyRaw.startsWith('0x') ? sponsorPrivateKeyRaw : `0x${sponsorPrivateKeyRaw}`;
+
+// Validate length/format: must be a 32-byte hex string (0x + 64 hex chars)
+if (!/^0x[0-9a-fA-F]{64}$/.test(sponsorPrivateKey)) {
+    throw new Error("SPONSOR_PRIVATE_KEY must be a 32-byte hex string (0x followed by 64 hex characters)");
+}
 
 const account = privateKeyToAccount(sponsorPrivateKey as `0x${string}`);
 
@@ -33,10 +41,16 @@ const q402Config: Q402Config = {
         {
             path: '/api/execute-transfer',
             token: '0x0000000000000000000000000000000000000000', // Native BNB
-            amount: '10000000000000000', // 0.01 BNB
+            // Accept any amount produced by an AI-generated payload; middleware will
+            // skip amount strictness when set to 'any'. Use caution: accepting any
+            // amount means the client/model must be trusted to not request excessive amounts.
+            amount: 'any',
         },
     ],
-    autoSettle: true
+    autoSettle: true,
+    // Allow the recipient address in the AI-generated payload to be variable
+    // (useful for user-directed transfers to arbitrary addresses)
+    allowAnyRecipient: true,
 }
 
 export const POST = withQ402Payment(q402Config, async(req, payment) => {
