@@ -13,6 +13,10 @@
     "@chaingpt/smartcontractauditor": "^0.0.2",
     "@chaingpt/smartcontractgenerator": "^0.0.4",
     "@hookform/resolvers": "^3.10.0",
+    "@q402/core": "link:../Q402/packages/core",
+    "@q402/facilitator": "link:../Q402/packages/facilitator",
+    "@q402/middleware-express": "link:../Q402/packages/middleware-express",
+    "@q402/middleware-hono": "link:../Q402/packages/middleware-hono",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -47,6 +51,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "ethers": "^6.15.0",
     "input-otp": "1.4.1",
     "ios-vibrator-pro-max": "latest",
     "lucide-react": "^0.454.0",
@@ -62,6 +67,7 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",
+    "viem": "^2.21.26",
     "zod": "3.25.76"
   },
   "devDependencies": {

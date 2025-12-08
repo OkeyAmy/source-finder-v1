@@ -9,7 +9,7 @@ export class ChainGPTClient {
     private generatorClient: SmartContractGenerator;
 
     constructor() {
-        this.apiKey = process.env.NEXT_PUBLIC_CHAINGPT_API_KEY!;
+        this.apiKey = process.env.CHAINGPT_API_KEY!;
         this.chatClient = new GeneralChat({
             apiKey: this.apiKey
         });
