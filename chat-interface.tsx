@@ -8,7 +8,7 @@ import { Plus, ArrowUp, Menu, RotateCcw, Zap, RefreshCcw, Copy, Share2, ThumbsUp
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import type { Network, Mode, ChatMessage, ResearchResponse, AuditResponse, ActionPreview, MessageCategory } from "@/lib/types"
+import type { Network, ChatMessage, ActionPreview, MessageCategory } from "@/lib/types"
 import { SlidePanel } from "@/components/chat/slide-panel"
 import { NewSessionModal } from "@/components/chat/new-session-modal"
 import { QuickActionMenu } from "@/components/chat/quick-action-menu"
@@ -20,20 +20,6 @@ import { TransactionPreviewDrawer } from "@/components/chat/drawers/transaction-
 import { CodeViewerModal } from "@/components/chat/drawers/code-viewer-modal"
 import { ThinkingBubble } from "@/components/chat/thinking-bubble"
 
-// Simulation Data
-import { tokenResearchSimulation, researchThinkingSteps } from "@/data/simulation/research-flows"
-import {
-  safeContractAuditSimulation,
-  riskyContractAuditSimulation,
-  auditThinkingSteps,
-} from "@/data/simulation/audit-flows"
-import {
-  transferActionSimulation,
-  swapActionSimulation,
-  deniedActionSimulation,
-  actionThinkingSteps,
-} from "@/data/simulation/action-flows"
-
 // Rotating placeholders
 const PLACEHOLDERS = [
   "Explain this token and show top holders",
@@ -44,10 +30,10 @@ const PLACEHOLDERS = [
 ]
 
 const apiRoutes: Record<MessageCategory, string> = {
-  chat: "/api/chaingpt/chat",
+  research: "/api/chaingpt/chat",
   audit: "/api/chaingpt/audit",
   generate: "/api/chaingpt/generate",
-  action: "",
+  action: "/api/chaingpt/generate",
   system: "",
 }
 
@@ -55,8 +41,8 @@ export default function ChatInterface() {
   // State
   const [inputValue, setInputValue] = useState("")
   const [hasTyped, setHasTyped] = useState(false)
-  const [activeMode, setActiveMode] = useState<Mode>("research")
-  const [network, setNetwork] = useState<Network>("bnb-testnet")
+  const [activeMode, setActiveMode] = useState<MessageCategory>("research")
+  const [network, setNetwork] = useState<Network>("bscTestnet")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [thinkingStep, setThinkingStep] = useState<string | null>(null)
@@ -113,32 +99,6 @@ export default function ChatInterface() {
       })
     }
   }, [messages, thinkingStep])
-
-  // Simulate streaming thinking steps
-  // const simulateThinking = async (steps: string[]) => {
-  //   for (const step of steps) {
-  //     setThinkingStep(step)
-  //     await new Promise((resolve) => setTimeout(resolve, 800))
-  //   }
-  //   setThinkingStep(null)
-  // }
-
-  // Determine response type based on input
-  // const determineResponseType = (input: string): "research" | "audit" | "action" => {
-  //   const lowerInput = input.toLowerCase()
-  //   if (lowerInput.includes("audit") || lowerInput.includes("security") || lowerInput.includes("vulnerability")) {
-  //     return "audit"
-  //   }
-  //   if (
-  //     lowerInput.includes("transfer") ||
-  //     lowerInput.includes("swap") ||
-  //     lowerInput.includes("deploy") ||
-  //     lowerInput.includes("send")
-  //   ) {
-  //     return "action"
-  //   }
-  //   return "research"
-  // }
 
   // Determine response type based on input with pattern matching
   const determineResponseType = (input: string): MessageCategory => {
@@ -215,15 +175,15 @@ export default function ChatInterface() {
       return 'generate'
     }
     
+    if (actionPatterns.some(pattern => pattern.test(lowerInput))) {
+      return 'action'
+    }
+
     if (auditPatterns.some(pattern => pattern.test(lowerInput))) {
       return 'audit'
     }
     
-    if (actionPatterns.some(pattern => pattern.test(lowerInput))) {
-      return 'action'
-    }
-    
-    return 'chat'
+    return 'research'
   }
 
   // Generate response by streaming from the API into a placeholder agent message
@@ -235,7 +195,7 @@ export default function ChatInterface() {
     const category: MessageCategory = determineResponseType(userMessage);
 
     const modeNames = { 
-      chat: 'Research', 
+      research: 'Research', 
       audit: 'Audit', 
       generate: 'Generate', 
       action: 'Action', 
@@ -243,17 +203,7 @@ export default function ChatInterface() {
     } 
 
     setDetectedMode(modeNames[category]); 
-    // Clear after 2 seconds 
-    
-    setTimeout(() => setDetectedMode(null), 2000);
-
-    setActiveMode(
-      category === "chat" 
-        ? "research"
-        : category === "audit" || category === "generate"
-          ? "audit"
-          : "action"
-    );
+    setActiveMode(category);
 
     // Create a placeholder agent message that we'll update as chunks arrive
     const agentId = `agent-${Date.now()}`
@@ -270,23 +220,96 @@ export default function ChatInterface() {
     // setThinkingStep(thinkingStep)
 
     try {
-      await handleChat(userMessage, (chunk: string) => {
-          // Append each chunk to the agent message content
-          setMessages((prev) => 
-            prev.map((m) => 
-              m.id === agentId
-                ? {...m, content: (m.content || "") + chunk}
-                : m
-            )
-          )
-        },
-        category
-      )
+      const isAction = category === 'action'
 
-      // Vibrate on complete
+      if (isAction) {
+        // payload-mode: stream generator that returns a marker-wrapped JSON payload
+        let collecting = false
+        let buffer = ''
+        let tail = ''
+
+        const onChunk = (chunk: string) => {
+          // Append chunk to agent message for normal visible streaming
+          setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + chunk } : m)))
+
+          const combined = tail + chunk
+
+          if (!collecting) {
+            const startIdx = combined.indexOf('[Q402-PAYLOAD]')
+            if (startIdx !== -1) {
+              collecting = true
+              const after = combined.slice(startIdx + '[Q402-PAYLOAD]'.length)
+              buffer += after
+            }
+          } else {
+            buffer += chunk
+          }
+
+          tail = combined.slice(-128)
+
+          const endIdx = buffer.indexOf('[/Q402-PAYLOAD]')
+          if (endIdx !== -1) {
+            const jsonText = buffer.slice(0, endIdx)
+            collecting = false
+            buffer = ''
+            tail = ''
+
+            try {
+              const parsed = JSON.parse(jsonText)
+
+              // Base64-encode the entire payment payload for the x-payment header.
+              const jsonString = JSON.stringify(parsed)
+              let encoded = ''
+              try {
+                // Browser-safe base64
+                encoded = typeof window !== 'undefined'
+                  ? window.btoa(unescape(encodeURIComponent(jsonString)))
+                  : Buffer.from(jsonString).toString('base64')
+              } catch (e) {
+                encoded = Buffer.from(jsonString).toString('base64')
+              }
+
+              ;(async () => {
+                try {
+                  const res = await fetch('/api/execute-transfer', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-payment': encoded,
+                    },
+                    body: JSON.stringify({ txPayload: parsed.txPayload ?? null }),
+                  })
+
+                  if (!res.ok) {
+                    const txt = await res.text()
+                    console.error('execute-transfer failed', txt)
+                    setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Failed to start transfer flow]' } : m)))
+                  } else {
+                    setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Payload accepted — execute-transfer started]' } : m)))
+                  }
+                } catch (e) {
+                  console.error('execute-transfer error', e)
+                  setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Network error while starting transfer]' } : m)))
+                }
+              })()
+            } catch (err) {
+              console.error('Failed to parse q402 JSON from AI', err)
+              setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Invalid payload received]' } : m)))
+            }
+          }
+        }
+        
+
+        await handleGeneratePayload(userMessage, onChunk)
+        console.log(buffer);
+      } else {
+        await handleChat(userMessage, (chunk: string) => {
+          setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + chunk } : m)))
+        }, category)
+      }
+
       navigator.vibrate?.(50)
     } catch (err: any) {
-      // Show error in the agent message
       const msg = err?.message || String(err)
       setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: `Error: ${msg}` } : m)))
     } finally {
@@ -295,7 +318,7 @@ export default function ChatInterface() {
   }
 
   const handleChat = async (userMessage: string, onChunk: (s: string) => void, messageType: MessageCategory) => {
-    const apiRoute = apiRoutes[messageType];
+    const apiRoute = apiRoutes[messageType] || apiRoutes.generate;
     if (!apiRoute) {
       throw new Error(`Unsupported message type: ${messageType}`);
     }
@@ -331,6 +354,42 @@ export default function ChatInterface() {
       }
     }
     console.log("Done reading!");
+  }
+
+  // Stream generator in payload mode (returns marker-wrapped JSON between [Q402-PAYLOAD] markers)
+  const handleGeneratePayload = async (userMessage: string, onChunk: (s: string) => void) => {
+    const apiRoute = apiRoutes.generate
+    if (!apiRoute) throw new Error('Generate route not configured')
+
+    const response = await fetch(apiRoute, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: userMessage,
+        mode: 'payload',
+        network,
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(err || 'Request Failed')
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('Streaming not supported')
+
+    const decoder = new TextDecoder()
+    let done = false
+    while (!done) {
+      const { value, done: doneReading } = await reader.read()
+      done = doneReading
+
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true })
+        onChunk(chunk)
+      }
+    }
   }
 
   // Handle form submission
@@ -464,7 +523,7 @@ export default function ChatInterface() {
           <div className="text-center">
             <h1 className="text-base font-semibold text-gray-900">Quack × ChainGPT Agent</h1>
             <p className="text-xs text-gray-500">
-              Environment: {network === "bnb-testnet" ? "BNB Testnet" : "BNB Mainnet"}
+              Environment: {network === "bscTestnet" ? "BNB Testnet" : "BNB Mainnet"}
             </p>
           </div>
 
@@ -606,7 +665,7 @@ export default function ChatInterface() {
               </div> 
             )}
 
-            {(["research", "audit", "action"] as Mode[]).map((mode) => (
+            {(["research", "audit", "action", "generate"] as MessageCategory[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
