@@ -13,8 +13,16 @@ if (!implementationContract) throw new Error("Q402_IMPLEMENTATION_CONTRACT requi
 const verifyingContract = process.env.Q402_VERIFYING_CONTRACT!;
 if (!verifyingContract) throw new Error("Q402_VERIFYING_CONTRACT required");
 
-const sponsorPrivateKey = process.env.SPONSOR_PRIVATE_KEY!;
-if (!sponsorPrivateKey) throw new Error("SPONSOR_PRIVATE_KEY required");
+const sponsorPrivateKeyRaw = process.env.SPONSOR_PRIVATE_KEY;
+if (!sponsorPrivateKeyRaw) throw new Error("SPONSOR_PRIVATE_KEY required");
+
+// Normalize: ensure 0x prefix
+const sponsorPrivateKey = sponsorPrivateKeyRaw.startsWith('0x') ? sponsorPrivateKeyRaw : `0x${sponsorPrivateKeyRaw}`;
+
+// Validate length/format: must be a 32-byte hex string (0x + 64 hex chars)
+if (!/^0x[0-9a-fA-F]{64}$/.test(sponsorPrivateKey)) {
+    throw new Error("SPONSOR_PRIVATE_KEY must be a 32-byte hex string (0x followed by 64 hex characters)");
+}
 
 const account = privateKeyToAccount(sponsorPrivateKey as `0x${string}`);
 
