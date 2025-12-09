@@ -66,8 +66,10 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "thirdweb": "^5.114.1",
     "vaul": "^1.1.2",
     "viem": "^2.21.26",
+    "wagmi": "^3.1.0",
     "zod": "3.25.76"
   },
   "devDependencies": {

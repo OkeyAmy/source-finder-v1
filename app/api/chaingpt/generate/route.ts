@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const verifyingContract = process.env.Q402_VERIFYING_CONTRACT || "";
     const paymentId = '0x' + randomBytes(32).toString('hex');
 
+    const deadline = Date.now()/1000 + 900;
 
     if (implementationContract === "") {
       return NextResponse.json(
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       const wrapper = `You must output ONLY a single JSON object representing a q402 payment payload.\n` +
         `Wrap the JSON exactly between the markers (no surrounding text):\n[Q402-PAYLOAD]\n<JSON_OBJECT>\n[/Q402-PAYLOAD]\n` +
         `The JSON must be valid and parseable by JSON.parse(). Do NOT include any code fences, explanations, or extra text.\n` +
-        `Use the provided paymentId exactly as given. Use unix deadline as a number (now + 900 seconds). Amounts must be strings in wei. Addresses and hex values must be 0x-prefixed strings.\n`;
+        `Use the provided paymentId and deadline exactly as given. Amounts must be strings in wei. Addresses and hex values must be 0x-prefixed strings.\n`;
 
       // Provide a strict JSON skeleton that the model MUST fill in verbatim
       const jsonSkeleton = {
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
               amount: "<amount in wei as string>",
               to: "<0xrecipient>",
               // deadline should be a number (unix seconds) when filled in by the model
-              deadline: "<deadline>",
+              deadline: deadline,
               // Use the server-generated paymentId value
               paymentId: paymentId,
               nonce: 0
@@ -149,7 +150,6 @@ export async function POST(req: NextRequest) {
               // decode "Buffer-like" object
               text = new TextDecoder().decode(new Uint8Array(chunk.data));
             } else {
-              // fallback
               text = String(chunk);
             }
 
@@ -162,14 +162,23 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    return new NextResponse(body, {
+    // return new NextResponse(body, {
+    //   status: 200,
+    //   headers: {
+    //     'Content-Type': 'text/plain; charset=utf-8',
+    //     'Cache-Control': 'no-store',
+    //     'Connection': 'keep-alive'
+    //   }
+    // })
+
+    return new Response(body, {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-store',
-        'Connection': 'keep-alive'
       }
-    })
+    });
+
 
   } catch (error: any) {
     console.error('ChainGPT Generate Error:', error);

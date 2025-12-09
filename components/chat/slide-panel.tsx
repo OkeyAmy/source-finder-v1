@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { X, Wallet, Shield, Clock, ChevronRight, ExternalLink, Check, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Network, Wallet as WalletType, Policy, ActivityItem } from "@/lib/types"
 import { walletsSimulation, defaultPolicySimulation, activityLogSimulation } from "@/data/simulation/wallet-data"
+import { useActiveAccount } from "thirdweb/react"
 
 interface SlidePanelProps {
   isOpen: boolean
@@ -19,16 +20,23 @@ type PanelTab = "wallet" | "policies" | "activity"
 
 export function SlidePanel({ isOpen, onClose, network, onNetworkChange, onScrollToActivity }: SlidePanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>("wallet")
-  const [wallets] = useState<WalletType[]>(walletsSimulation)
+  const [wallets, setWallets] = useState<any[]>(walletsSimulation)
+
   const [policy] = useState<Policy>(defaultPolicySimulation)
   const [activities] = useState<ActivityItem[]>(activityLogSimulation)
   const [showNetworkConfirm, setShowNetworkConfirm] = useState(false)
   const [pendingNetwork, setPendingNetwork] = useState<Network | null>(null)
 
-  const activeWallet = wallets.find((w) => w.isActive)
+  const activeWallet = useActiveAccount();
+
+  useEffect(() => {
+    activeWallet 
+      ? setWallets(prev => ([...prev, activeWallet]))
+      : null
+  }, [])
 
   const handleNetworkSwitch = (newNetwork: Network) => {
-    if (newNetwork === "bnb-mainnet" && network === "bnb-testnet") {
+    if (newNetwork === "bsc" && network === "bscTestnet") {
       setPendingNetwork(newNetwork)
       setShowNetworkConfirm(true)
     } else {
@@ -116,7 +124,7 @@ export function SlidePanel({ isOpen, onClose, network, onNetworkChange, onScroll
                 {activeWallet && (
                   <div className="bg-gray-50 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-gray-900">{activeWallet.name}</span>
+                      <span className="font-medium text-gray-900">{"Main Wallet"}</span>
                       <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Connected</span>
                     </div>
                     <p className="text-sm text-gray-500 font-mono">{truncateAddress(activeWallet.address)}</p>
@@ -150,10 +158,10 @@ export function SlidePanel({ isOpen, onClose, network, onNetworkChange, onScroll
                 <h3 className="text-xs font-medium text-gray-500 uppercase mb-3">Network</h3>
                 <div className="space-y-2">
                   <button
-                    onClick={() => handleNetworkSwitch("bnb-testnet")}
+                    onClick={() => handleNetworkSwitch("bscTestnet")}
                     className={cn(
                       "w-full flex items-center justify-between p-3 rounded-xl transition-colors",
-                      network === "bnb-testnet"
+                      network === "bsc"
                         ? "bg-amber-50 border border-amber-200"
                         : "bg-gray-50 hover:bg-gray-100",
                     )}
@@ -164,14 +172,14 @@ export function SlidePanel({ isOpen, onClose, network, onNetworkChange, onScroll
                       </div>
                       <span className="font-medium text-gray-900">BNB Testnet</span>
                     </div>
-                    {network === "bnb-testnet" && <Check className="h-4 w-4 text-amber-600" />}
+                    {network === "bscTestnet" && <Check className="h-4 w-4 text-amber-600" />}
                   </button>
 
                   <button
-                    onClick={() => handleNetworkSwitch("bnb-mainnet")}
+                    onClick={() => handleNetworkSwitch("bsc")}
                     className={cn(
                       "w-full flex items-center justify-between p-3 rounded-xl transition-colors",
-                      network === "bnb-mainnet"
+                      network === "bsc"
                         ? "bg-amber-50 border border-amber-200"
                         : "bg-gray-50 hover:bg-gray-100",
                     )}
@@ -182,7 +190,7 @@ export function SlidePanel({ isOpen, onClose, network, onNetworkChange, onScroll
                       </div>
                       <span className="font-medium text-gray-900">BNB Mainnet</span>
                     </div>
-                    {network === "bnb-mainnet" && <Check className="h-4 w-4 text-amber-600" />}
+                    {network === "bsc" && <Check className="h-4 w-4 text-amber-600" />}
                   </button>
                 </div>
               </div>

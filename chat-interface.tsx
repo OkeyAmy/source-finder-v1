@@ -19,6 +19,11 @@ import { ActionCard } from "@/components/chat/message-cards/action-card"
 import { TransactionPreviewDrawer } from "@/components/chat/drawers/transaction-preview-drawer"
 import { CodeViewerModal } from "@/components/chat/drawers/code-viewer-modal"
 import { ThinkingBubble } from "@/components/chat/thinking-bubble"
+import { selectPaymentDetails, SupportedNetworks, type PaymentRequiredResponse, createPaymentHeader } from '@q402/core'
+import { privateKeyToAccount } from 'viem/accounts';
+import { ConnectButton, useActiveAccount } from "thirdweb/react";
+import { bscTestnet } from "thirdweb/chains";
+import { client } from "@/components/thirdWebClient";
 
 // Rotating placeholders
 const PLACEHOLDERS = [
@@ -98,7 +103,9 @@ export default function ChatInterface() {
         behavior: "smooth",
       })
     }
-  }, [messages, thinkingStep])
+  }, [messages, thinkingStep]);
+
+  const activeAccount = useActiveAccount();
 
   // Determine response type based on input with pattern matching
   const determineResponseType = (input: string): MessageCategory => {
@@ -256,6 +263,8 @@ export default function ChatInterface() {
 
             try {
               const parsed = JSON.parse(jsonText)
+              parsed.paymentDetails.witness.message.owner = activeAccount?.address
+              console.log("Parsed: ", parsed);
 
               // Base64-encode the entire payment payload for the x-payment header.
               const jsonString = JSON.stringify(parsed)
@@ -275,14 +284,52 @@ export default function ChatInterface() {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
-                      'x-payment': encoded,
+                      // 'x-payment': encoded,
                     },
-                    body: JSON.stringify({ txPayload: parsed.txPayload ?? null }),
+                    body: JSON.stringify({ txPayload: parsed.paymentDetails ?? null }),
                   })
 
-                  if (!res.ok) {
+                  if (res.status === 402) {
                     const txt = await res.text()
-                    console.error('execute-transfer failed', txt)
+                    console.log(JSON.parse(txt));
+                    const first402Response = JSON.parse(txt);
+                    // console.error('execute-transfer failed', txt)
+
+                    const paymentDetails = selectPaymentDetails(first402Response, {
+                      network: SupportedNetworks.BSC_TESTNET
+                    })
+
+                    if (!paymentDetails) {
+                      throw new Error("No suitable payment method found");
+                    }
+
+                    if (!activeAccount) {
+                      throw new Error("No account connected");
+                    }
+
+                    // console.log(paymentDetails);
+                    console.log("Payment Details: ", paymentDetails);
+                    try {
+                      // @ts-ignore
+                      const paymentHeader = await createPaymentHeader(activeAccount, paymentDetails);
+                      console.log("Payment Header: ", paymentHeader);
+
+                      const newResponse = await fetch('/api/execute-transfer', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-payment': paymentHeader,
+                        },
+                        body: JSON.stringify({ txPayload: parsed.paymentDetails ?? null }),
+                      })
+
+                      console.log("New Response: ", newResponse.text());
+                    } catch (err) {
+                      console.error(err);
+                    }
+
+                    setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Failed to start transfer flow]' } : m)))
+                  } else if (res.status !== 200) {
                     setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Failed to start transfer flow]' } : m)))
                   } else {
                     setMessages((prev) => prev.map((m) => (m.id === agentId ? { ...m, content: (m.content || '') + '\n\n[Payload accepted — execute-transfer started]' } : m)))
@@ -526,6 +573,8 @@ export default function ChatInterface() {
               Environment: {network === "bscTestnet" ? "BNB Testnet" : "BNB Mainnet"}
             </p>
           </div>
+          
+          <ConnectButton client={client} chain={bscTestnet} />
 
           <Button
             variant="ghost"

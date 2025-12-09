@@ -14,6 +14,7 @@ import {
   NetworkConfig,
   SupportedNetworks,
   type SupportedNetwork,
+  // type SignedPaymentPayload,
 } from '@q402/core'
 import { createWalletClient, type WalletClient } from 'viem'
 import { randomBytes } from 'crypto'
@@ -115,6 +116,11 @@ export function withQ402Payment(
       const pathname = new URL(req.url).pathname
       const endpoint = config.endpoints.find((ep) => pathname === ep.path)
 
+      const body = await req.json();
+      const txPayload = body.txPayload;
+
+      console.log('Amount: ', txPayload?.amount);
+
       // If endpoint not configured for payment, pass through
       if (!endpoint) {
         const mockPayment: Q402PaymentInfo = {
@@ -130,6 +136,7 @@ export function withQ402Payment(
       if (!paymentHeader) {
         // Return 402 Payment Required
         const response = create402Response(config, endpoint)
+        response.accepts[0].amount = txPayload.amount;
         return NextResponse.json(response, { status: 402 })
       }
 
@@ -145,11 +152,16 @@ export function withQ402Payment(
       }
 
       // Verify payment
-      const verificationResult = await verifyPayment(payload)
+      const verificationResult = await verifyPayment(payload);
+      console.log("Payload: ", payload);
 
       const tokenMismatch = endpoint.token !== 'any' && payload.paymentDetails.token !== endpoint.token;
       const amountMismatch = endpoint.amount !== 'any' && String(payload.paymentDetails.amount) !== String(endpoint.amount);
       const toMismatch = !config.allowAnyRecipient && payload.paymentDetails.to !== config.recipientAddress;
+
+      if (tokenMismatch) console.log("Token mismatch");
+      if (amountMismatch) console.log("Amount mismatch");
+      if (toMismatch) console.log("Recipient Mismatch");
 
       if (tokenMismatch || amountMismatch || toMismatch) {
         return NextResponse.json({ error: 'Payment details do not match endpoint configuration' }, { status: 402 });
@@ -159,18 +171,22 @@ export function withQ402Payment(
       if (Date.now()/1000 > deadline) {
         return NextResponse.json({ error: 'Payment expired' }, { status: 402 });
       }
+      console.log("Deadline validation checked");
       // check if paymentId already used: if (await isPaymentIdUsed(paymentId)) reject
 
       if (!verificationResult.isValid) {
+        console.log("Fail due to verification failed");
+        
         return NextResponse.json(
           {
             x402Version: 1,
-            accepts: [],
+            accepts: [payload.paymentDetails],
             error: `Payment verification failed: ${verificationResult.invalidReason}`,
           },
           { status: 402 }
         )
       }
+      console.log("Continued despite verification failure")
 
       // Create payment info
       const paymentInfo: Q402PaymentInfo = {
@@ -179,6 +195,8 @@ export function withQ402Payment(
         amount: 'amount' in payload.paymentDetails ? payload.paymentDetails.amount : undefined,
         token: 'token' in payload.paymentDetails ? payload.paymentDetails.token : undefined,
       }
+
+      console.log("Payment Info built successfully");
 
       // Auto-settle if enabled
       let settlementHeaders: Record<string, string> = {}

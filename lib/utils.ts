@@ -1,7 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { keccak256, toUtf8Bytes } from "ethers";
-import { ethers } from "ethers";
 import { BrowserProvider } from "ethers";
 
 export function cn(...inputs: ClassValue[]) {
@@ -59,4 +58,38 @@ export async function requestExecution(txPayload: Record<string, any>) {
     // If not 402, maybe the request was already authorized (rare)
     return res.json();
   }
+}
+
+/**
+ * Stringify object with deterministic key ordering
+ */
+export function stableStringify(obj: any): string {
+  const replacer = (_: string, value: any) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const ordered: Record<string, any> = {}
+      Object.keys(value)
+        .sort()
+        .forEach((k) => {
+          ordered[k] = value[k]
+        })
+      return ordered
+    }
+    return value
+  }
+  return JSON.stringify(obj, replacer)
+}
+
+/**
+ * Hash canonical JSON string using keccak256
+ */
+export function payloadHash(canonicalJson: string): string {
+  return keccak256(toUtf8Bytes(canonicalJson))
+}
+
+/**
+ * Create hash of the transaction payload that both client and server can verify
+ */
+export function hashTransactionPayload(txPayload: any): string {
+  const canonical = stableStringify(txPayload)
+  return payloadHash(canonical)
 }

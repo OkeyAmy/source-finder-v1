@@ -1,4 +1,5 @@
 import { Q402Config, withQ402Payment } from "@/lib/q402/middleware";
+import { hashTransactionPayload } from "@/lib/utils";
 import { NextResponse } from "next/server";
 import { createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from "viem/accounts";
@@ -40,7 +41,7 @@ const q402Config: Q402Config = {
     endpoints: [
         {
             path: '/api/execute-transfer',
-            token: '0x0000000000000000000000000000000000000000', // Native BNB
+            token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native BNB
             // Accept any amount produced by an AI-generated payload; middleware will
             // skip amount strictness when set to 'any'. Use caution: accepting any
             // amount means the client/model must be trusted to not request excessive amounts.
@@ -54,6 +55,11 @@ const q402Config: Q402Config = {
 }
 
 export const POST = withQ402Payment(q402Config, async(req, payment) => {
+    
+    const body = await req.json();
+    const txPayload = body.txPayload;
+
+    console.log("Payment: ", payment);
     if (!payment.verified) {
         return NextResponse.json(
             { error: 'Payment required' },
@@ -61,8 +67,6 @@ export const POST = withQ402Payment(q402Config, async(req, payment) => {
         )
     }
 
-    const body = await req.json();
-    const txPayload = body.txPayload;
 
     const premiumData = {
         secret: 'This data costs 0.01BNB',
@@ -70,6 +74,8 @@ export const POST = withQ402Payment(q402Config, async(req, payment) => {
         amount: payment.amount,
         message: 'Execution accepted - facilitator will submit or has submitted tx'
     }
+
+    console.log(premiumData);
 
     return NextResponse.json({
         success: true,

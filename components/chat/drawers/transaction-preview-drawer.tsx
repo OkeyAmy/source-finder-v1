@@ -59,7 +59,7 @@ export function TransactionPreviewDrawer({ isOpen, onClose, data, onExecute }: T
             <div className="flex items-center justify-between py-3 border-b">
               <span className="text-sm text-gray-500">Network</span>
               <span className="text-sm font-medium text-gray-900">
-                {data.network === "bnb-testnet" ? "BNB Testnet" : "BNB Mainnet"}
+                {data.network === "bsc" ? "BNB Testnet" : "BNB Mainnet"}
               </span>
             </div>
 
