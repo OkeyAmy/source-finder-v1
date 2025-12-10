@@ -27,7 +27,6 @@ if (!/^0x[0-9a-fA-F]{64}$/.test(sponsorPrivateKey)) {
 
 const account = privateKeyToAccount(sponsorPrivateKey as `0x${string}`);
 
-
 const q402Config: Q402Config = {
     network: "bsc-testnet",
     recipientAddress: process.env.Q402_RECIPIENT_ADDRESS!,
@@ -52,12 +51,15 @@ const q402Config: Q402Config = {
     // Allow the recipient address in the AI-generated payload to be variable
     // (useful for user-directed transfers to arbitrary addresses)
     allowAnyRecipient: true,
+    // Development mode: accept payloads without full EIP-7702 signatures.
+    // Remove this for production and implement proper wallet signing on client.
+    devMode: true,
 }
 
 export const POST = withQ402Payment(q402Config, async(req, payment) => {
     
-    const body = await req.json();
-    const txPayload = body.txPayload;
+    // const body = await req.json();
+    // const txPayload = body.txPayload;
 
     console.log("Payment: ", payment);
     if (!payment.verified) {

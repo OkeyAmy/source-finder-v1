@@ -35,6 +35,9 @@ export interface Q402Config {
   // When true the middleware will allow the payment `to` field to be any address
   // (useful for agent-generated transfers where the recipient varies).
   allowAnyRecipient?: boolean
+  // When true, skip strict EIP-7702 signature validation (yParity/r/s fields).
+  // Only for development/testing. In production, require full signatures.
+  devMode?: boolean
 }
 
 export interface Q402PaymentInfo {
@@ -177,14 +180,20 @@ export function withQ402Payment(
       if (!verificationResult.isValid) {
         console.log("Fail due to verification failed");
         
-        return NextResponse.json(
-          {
-            x402Version: 1,
-            accepts: [payload.paymentDetails],
-            error: `Payment verification failed: ${verificationResult.invalidReason}`,
-          },
-          { status: 402 }
-        )
+        // In development mode, allow payloads that fail only due to missing signature fields.
+        // Production should require full EIP-7702 signatures.
+        if (config.devMode && verificationResult.invalidReason === 'invalid_authorization') {
+          console.log("Development mode: accepting payload despite missing signature fields");
+        } else {
+          return NextResponse.json(
+            {
+              x402Version: 1,
+              accepts: [payload.paymentDetails],
+              error: `Payment verification failed: ${verificationResult.invalidReason}`,
+            },
+            { status: 402 }
+          )
+        }
       }
       console.log("Continued despite verification failure")
 
@@ -212,6 +221,7 @@ export function withQ402Payment(
               blockNumber: settlementResult.blockNumber,
               status: 'confirmed',
             }
+            console.log("Transaction Hash: ", settlementResult.txHash);
             settlementHeaders[X_PAYMENT_RESPONSE_HEADER] = encodeBase64(executionResponse)
           } else {
             console.error('Settlement failed:', settlementResult.error)

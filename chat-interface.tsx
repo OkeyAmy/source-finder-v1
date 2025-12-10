@@ -323,7 +323,9 @@ export default function ChatInterface() {
                         body: JSON.stringify({ txPayload: parsed.paymentDetails ?? null }),
                       })
 
-                      console.log("New Response: ", newResponse.text());
+                      const newText = await newResponse.text();
+
+                      console.log("New Response: ", newText);
                     } catch (err) {
                       console.error(err);
                     }

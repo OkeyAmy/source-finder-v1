@@ -97,6 +97,8 @@ export async function POST(req: NextRequest) {
             chainId: "<number>",
             address: implementationContract,
             nonce: 0
+            // Signature fields (yParity, r, s) are optional for development.
+            // Client will add them after wallet signing before sending.
           }
         }
       }
