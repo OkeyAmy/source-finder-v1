@@ -1,5 +1,6 @@
 import type React from "react"
 import "./globals.css"
+import { ThirdwebProvider } from "thirdweb/react";
 
 export default function RootLayout({
   children,
@@ -8,7 +9,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 overflow-hidden">{children}</body>
+      <body className="bg-gray-50 overflow-hidden">
+        <ThirdwebProvider >
+          {children}
+        </ThirdwebProvider>
+      </body>
     </html>
   )
 }

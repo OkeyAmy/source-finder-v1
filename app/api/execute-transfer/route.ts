@@ -1,4 +1,5 @@
 import { Q402Config, withQ402Payment } from "@/lib/q402/middleware";
+import { hashTransactionPayload } from "@/lib/utils";
 import { NextResponse } from "next/server";
 import { createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from "viem/accounts";
@@ -26,7 +27,6 @@ if (!/^0x[0-9a-fA-F]{64}$/.test(sponsorPrivateKey)) {
 
 const account = privateKeyToAccount(sponsorPrivateKey as `0x${string}`);
 
-
 const q402Config: Q402Config = {
     network: "bsc-testnet",
     recipientAddress: process.env.Q402_RECIPIENT_ADDRESS!,
@@ -40,7 +40,7 @@ const q402Config: Q402Config = {
     endpoints: [
         {
             path: '/api/execute-transfer',
-            token: '0x0000000000000000000000000000000000000000', // Native BNB
+            token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native BNB
             // Accept any amount produced by an AI-generated payload; middleware will
             // skip amount strictness when set to 'any'. Use caution: accepting any
             // amount means the client/model must be trusted to not request excessive amounts.
@@ -51,9 +51,17 @@ const q402Config: Q402Config = {
     // Allow the recipient address in the AI-generated payload to be variable
     // (useful for user-directed transfers to arbitrary addresses)
     allowAnyRecipient: true,
+    // Development mode: accept payloads without full EIP-7702 signatures.
+    // Remove this for production and implement proper wallet signing on client.
+    devMode: true,
 }
 
 export const POST = withQ402Payment(q402Config, async(req, payment) => {
+    
+    // const body = await req.json();
+    // const txPayload = body.txPayload;
+
+    console.log("Payment: ", payment);
     if (!payment.verified) {
         return NextResponse.json(
             { error: 'Payment required' },
@@ -61,8 +69,6 @@ export const POST = withQ402Payment(q402Config, async(req, payment) => {
         )
     }
 
-    const body = await req.json();
-    const txPayload = body.txPayload;
 
     const premiumData = {
         secret: 'This data costs 0.01BNB',
@@ -70,6 +76,8 @@ export const POST = withQ402Payment(q402Config, async(req, payment) => {
         amount: payment.amount,
         message: 'Execution accepted - facilitator will submit or has submitted tx'
     }
+
+    console.log(premiumData);
 
     return NextResponse.json({
         success: true,
